@@ -30,9 +30,7 @@ class PostController extends Controller
 
     public function show(Request $request, Post $post)
     {
-        if ($post->status !== Post::STATUS_NORMAL || $post->is_hidden) {
-            abort(404);
-        }
+        abort_unless($post->isVisible(), 404);
 
         $sessionKey = 'viewed_post_'.$post->id;
         if (! $request->session()->has($sessionKey)) {
@@ -51,7 +49,7 @@ class PostController extends Controller
                     'id' => $post->id,
                     'title' => $post->title,
                     'content' => $post->content,
-                    'content_html' => Str::markdown($post->content),
+                    'content_html' => Str::markdown($post->content, ['html_input' => 'strip', 'allow_unsafe_links' => false]),
                     'author' => $post->user->displayName(),
                     'author_username' => $post->user->username,
                     'author_certified' => $post->user->is_certified,
@@ -82,6 +80,8 @@ class PostController extends Controller
 
     public function edit(Request $request, Post $post)
     {
+        abort_unless($post->isVisible() || $request->user()->isAdmin(), 404);
+
         if ($post->user_id !== $request->user()->id && ! $request->user()->isAdmin()) {
             abort(403);
         }

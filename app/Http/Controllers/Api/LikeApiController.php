@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Comment;
 use App\Models\Like;
+use App\Models\Notification;
 use App\Models\Post;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class LikeApiController extends Controller
 {
@@ -22,7 +24,7 @@ class LikeApiController extends Controller
 
         $model = $data['type'] === 'post'
             ? Post::query()->visible()->findOrFail($data['id'])
-            : Comment::query()->visible()->findOrFail($data['id']);
+            : Comment::query()->visibleOnForum()->findOrFail($data['id']);
 
         $like = Like::where([
             'user_id' => $request->user()->id,
@@ -44,7 +46,7 @@ class LikeApiController extends Controller
             if ($model instanceof Post) {
                 $this->notifications->notify(
                     $model->user_id,
-                    \App\Models\Notification::TYPE_POST_LIKE,
+                    Notification::TYPE_POST_LIKE,
                     $request->user()->id,
                     Post::class,
                     $model->id,
@@ -53,11 +55,11 @@ class LikeApiController extends Controller
             } else {
                 $this->notifications->notify(
                     $model->user_id,
-                    \App\Models\Notification::TYPE_COMMENT_LIKE,
+                    Notification::TYPE_COMMENT_LIKE,
                     $request->user()->id,
                     Comment::class,
                     $model->id,
-                    ['content' => \Illuminate\Support\Str::limit($model->content, 50)]
+                    ['content' => Str::limit($model->content, 50)]
                 );
             }
         }

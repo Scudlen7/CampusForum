@@ -5,21 +5,39 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Post;
+use App\Models\Tag;
+use App\Observers\PostObserver;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class PostApiController extends Controller
 {
     public function index(Request $request)
     {
         $query = Post::query()
-            ->with(['user:id,username,nickname,is_certified', 'category:id,name,slug'])
+            ->with(['user:id,username,nickname,is_certified', 'category:id,name,slug', 'tags:id,name'])
             ->visible();
 
-        if ($request->filled('category')) {
-            $category = Category::where('slug', $request->string('category'))->first();
-            if ($category) {
-                $query->where('category_id', $category->id);
-            }
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:128'],
+            'tag' => ['nullable', 'string', 'max:32'],
+            'category' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        if (! empty($filters['category'])) {
+            $query->whereHas('category', fn ($category) => $category
+                ->where('slug', $filters['category'])->where('is_active', true));
+        }
+
+        $keyword = trim($filters['q'] ?? '');
+        if ($keyword !== '') {
+            $pattern = '%'.strtr($keyword, ['!' => '!!', '%' => '!%', '_' => '!_']).'%';
+            $query->whereRaw("title LIKE ? ESCAPE '!'", [$pattern]);
+        }
+
+        $tag = trim($filters['tag'] ?? '');
+        if ($tag !== '') {
+            $query->whereHas('tags', fn ($tags) => $tags->where('name', $tag));
         }
 
         if ($request->filled('user_id')) {
@@ -36,12 +54,14 @@ class PostApiController extends Controller
             $query->orderByDesc('is_pinned')->orderByDesc('created_at');
         }
 
-        $perPage = min($request->integer('per_page', 20), 50);
-        $paginator = $query->paginate($perPage);
+        $perPage = max(1, min($request->integer('per_page', 20), 50));
+        $paginator = $query->orderByDesc('id')->paginate($perPage);
 
         return response()->json([
             'data' => $paginator->getCollection()->map(fn (Post $post) => $this->transform($post)),
             'total' => $paginator->total(),
+            'current_page' => $paginator->currentPage(),
+            'last_page' => $paginator->lastPage(),
         ]);
     }
 
@@ -73,6 +93,8 @@ class PostApiController extends Controller
 
     public function update(Request $request, Post $post)
     {
+        abort_unless($post->isVisible() || $request->user()->isAdmin(), 404);
+
         if ($post->user_id !== $request->user()->id && ! $request->user()->isAdmin()) {
             abort(403);
         }
@@ -97,7 +119,7 @@ class PostApiController extends Controller
 
         if (array_key_exists('tags', $data)) {
             $this->syncTags($post, $data['tags'] ?? []);
-            \App\Observers\PostObserver::syncTagCounts($post, $oldTagIds, $post->tags()->pluck('tags.id')->all());
+            PostObserver::syncTagCounts($post, $oldTagIds, $post->tags()->pluck('tags.id')->all());
         }
 
         return response()->json(['data' => $this->transform($post->fresh()->load('user', 'category', 'tags'))]);
@@ -111,11 +133,11 @@ class PostApiController extends Controller
             if ($name === '') {
                 continue;
             }
-            $slug = \Illuminate\Support\Str::slug($name);
+            $slug = Str::slug($name);
             if ($slug === '') {
                 $slug = md5($name);
             }
-            $tag = \App\Models\Tag::firstOrCreate(
+            $tag = Tag::firstOrCreate(
                 ['slug' => $slug],
                 ['name' => $name, 'post_count' => 0]
             );
@@ -124,7 +146,7 @@ class PostApiController extends Controller
 
         $oldTagIds = $post->tags()->pluck('tags.id')->all();
         $post->tags()->sync($tagIds);
-        \App\Observers\PostObserver::syncTagCounts($post, $oldTagIds, $tagIds);
+        PostObserver::syncTagCounts($post, $oldTagIds, $tagIds);
     }
 
     private function transform(Post $post): array

@@ -8,13 +8,19 @@ createPageApp(AdminGridPage, {
     apiUrl: '/admin/api/certifications',
     activeAdminMenu: 'certifications',
     gridHeader: '认证审核',
+    paginated: true,
     columns: [
         { id: 'username', header: [{ text: '用户' }], width: 120 },
         { id: 'student_no', header: [{ text: '学号' }], width: 120 },
-        { id: 'status', header: [{ text: '状态' }], width: 80 },
+        { id: 'status', header: [{ text: '状态' }], width: 90, template: (value) => ['待审核', '已通过', '已拒绝'][value] },
         { id: 'created_at', header: [{ text: '提交时间' }], width: 160 },
     ],
     actions: [
+        {
+            id: 'image',
+            label: '查看认证材料',
+            handler: (row) => window.open('/admin/api/certifications/' + row.id + '/image', '_blank', 'noopener'),
+        },
         {
             id: 'approve',
             label: '通过',

@@ -71,6 +71,14 @@ class Comment extends Model
         return $this->morphMany(Report::class, 'reportable');
     }
 
+    public function scopeVisibleOnForum($query)
+    {
+        return $query->visible()
+            ->whereHas('post', fn ($post) => $post->visible())
+            ->where(fn ($comment) => $comment->whereNull('parent_id')
+                ->orWhereHas('parent', fn ($parent) => $parent->visible()));
+    }
+
     public function scopeVisible($query)
     {
         return $query->where('status', self::STATUS_NORMAL);

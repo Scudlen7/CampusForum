@@ -7,6 +7,7 @@ use App\Models\Comment;
 use App\Models\Post;
 use App\Models\Report;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ReportApiController extends Controller
 {
@@ -19,19 +20,20 @@ class ReportApiController extends Controller
             'description' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $model = $data['type'] === 'post'
-            ? Post::findOrFail($data['id'])
-            : Comment::findOrFail($data['id']);
+        $created = DB::transaction(function () use ($request, $data) {
+            $model = $data['type'] === 'post'
+            ? Post::visible()->lockForUpdate()->findOrFail($data['id'])
+            : Comment::visibleOnForum()->lockForUpdate()->findOrFail($data['id']);
 
-        Report::create([
-            'reporter_id' => $request->user()->id,
-            'reportable_type' => $model::class,
-            'reportable_id' => $model->id,
-            'reason' => $data['reason'],
-            'description' => $data['description'] ?? null,
-            'status' => Report::STATUS_PENDING,
-        ]);
+            return $model->reports()->firstOrCreate([
+                'reporter_id' => $request->user()->id,
+                'status' => Report::STATUS_PENDING,
+            ], [
+                'reason' => $data['reason'],
+                'description' => $data['description'] ?? null,
+            ])->wasRecentlyCreated;
+        });
 
-        return response()->json(['message' => '举报已提交']);
+        return response()->json(['message' => $created ? '举报已提交' : '已有待处理的举报']);
     }
 }

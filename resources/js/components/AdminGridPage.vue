@@ -26,11 +26,16 @@ const props = defineProps({
     headerActions: { type: Array, default: () => [] },
     activeAdminMenu: { type: String, default: 'dashboard' },
     gridHeader: { type: String, default: '' },
+    paginated: { type: Boolean, default: false },
 });
 
 let layout = null;
+let toolbar = null;
 let grid = null;
 let selectedRow = null;
+let page = 1;
+let lastPage = 1;
+let loading = false;
 
 function initContent(contentCell) {
     const mainCell = mountAdminLayout(contentCell, props.activeAdminMenu);
@@ -56,13 +61,32 @@ function initContent(contentCell) {
         })),
     ];
 
+    if (props.paginated) {
+        toolbarItems.push(
+            { id: 'spacer', type: 'spacer' },
+            { id: 'previousPage', type: 'button', value: '上一页' },
+            { id: 'nextPage', type: 'button', value: '下一页' },
+            { id: 'pageNumber', type: 'title', value: '第 1 页' },
+        );
+    }
+
     if (toolbarItems.length) {
-        const toolbar = attachToolbar(layout.getCell('toolbar'), {
+        toolbar = attachToolbar(layout.getCell('toolbar'), {
             css: 'dhx_widget--bordered',
             data: toolbarItems,
         });
 
-        toolbar.events.on('click', (id) => {
+        toolbar.events.on('click', async (id) => {
+            if (loading) {
+                return;
+            }
+            if (id === 'previousPage' || id === 'nextPage') {
+                const next = page + (id === 'nextPage' ? 1 : -1);
+                if (next >= 1 && next <= lastPage) {
+                    await reload(next);
+                }
+                return;
+            }
             const headerAction = props.headerActions.find((action) => action.id === id);
             if (headerAction) {
                 headerAction.handler(reload);
@@ -75,7 +99,11 @@ function initContent(contentCell) {
             }
 
             const action = props.actions.find((item) => item.id === id);
-            action?.handler(selectedRow, reload);
+            try {
+                await action?.handler(selectedRow, reload);
+            } catch (error) {
+                showError(error.message);
+            }
         });
     }
 
@@ -95,10 +123,27 @@ function initContent(contentCell) {
     reload();
 }
 
-function reload() {
-    loadGridData(grid, props.apiUrl).catch(() => {
+async function reload(targetPage = page) {
+    loading = true;
+    selectedRow = null;
+    try {
+        const url = props.paginated ? props.apiUrl + '?page=' + targetPage : props.apiUrl;
+        const result = await loadGridData(grid, url);
+        if (props.paginated) {
+            lastPage = result.last_page;
+            if (targetPage > lastPage) {
+                await reload(lastPage);
+                return;
+            }
+            page = targetPage;
+            toolbar.data.update('pageNumber', { value: '第 ' + page + ' / ' + lastPage + ' 页' });
+        }
+    } catch (error) {
         grid.data.parse([]);
-    });
+        showError(error.message);
+    } finally {
+        loading = false;
+    }
 }
 
 onBeforeUnmount(() => {

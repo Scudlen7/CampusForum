@@ -111,6 +111,11 @@ class Post extends Model
         return $this->category?->name ?? '未分类';
     }
 
+    public function isVisible(): bool
+    {
+        return $this->status === self::STATUS_NORMAL && ! $this->is_hidden;
+    }
+
     public function scopeVisible($query)
     {
         return $query->where('status', self::STATUS_NORMAL)->where('is_hidden', false);

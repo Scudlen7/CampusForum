@@ -90,6 +90,7 @@ Route::prefix('admin')->middleware(['auth', 'admin'])->group(function () {
         Route::post('/users/{user}/ban', [UserAdminController::class, 'ban']);
         Route::post('/users/{user}/unban', [UserAdminController::class, 'unban']);
         Route::get('/certifications', [CertificationAdminController::class, 'apiIndex']);
+        Route::get('/certifications/{certification}/image', [CertificationAdminController::class, 'image']);
         Route::post('/certifications/{certification}/approve', [CertificationAdminController::class, 'approve']);
         Route::post('/certifications/{certification}/reject', [CertificationAdminController::class, 'reject']);
         Route::get('/posts', [PostAdminController::class, 'apiIndex']);
@@ -100,6 +101,7 @@ Route::prefix('admin')->middleware(['auth', 'admin'])->group(function () {
         Route::post('/comments/{comment}/toggle-hidden', [CommentAdminController::class, 'toggleHidden']);
         Route::delete('/comments/{comment}', [CommentAdminController::class, 'destroy']);
         Route::get('/reports', [ReportAdminController::class, 'apiIndex']);
+        Route::get('/reports/{report}', [ReportAdminController::class, 'show']);
         Route::post('/reports/{report}/handle', [ReportAdminController::class, 'handle']);
         Route::get('/categories', [CategoryAdminController::class, 'apiIndex']);
         Route::post('/categories', [CategoryAdminController::class, 'store']);
